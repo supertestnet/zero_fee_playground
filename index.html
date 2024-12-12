@@ -187,6 +187,22 @@
                 background-color: #cccccc;
                 padding: 0.5rem;
             }
+            .checkbox_container div {
+                display: inline-block;
+                vertical-align: middle;
+            }
+            .checkbox_container * {
+                user-select: none;
+            }
+            .use_p2a_div {
+                width: 1.5rem;
+            }
+            .use_p2a {
+                width: 1rem;
+            }
+            .p2a_label_div {
+                width: calc( 100% - 1.5rem );
+            }
             @media screen and (max-width: 600px) {
             }
         </style>
@@ -262,11 +278,16 @@
         </div>
         <div class="step step_3">
             <p class="header">Step 3</p>
-            <p>Hit submit. A pair of two transactions will be generated; the first pays no fees and will send your money to a "waiting room" address. The second pays "double" fees and moves your money out of the waiting room and into the address you chose as a destination. A box called "step 4" will appear containing the two transactions in "raw" format (aka hex format) and it will also explain what to do next.</p>
+            <p>Choose whether or not you want to use the new "P2A" address type. (P2A means pay-to-anchor.) This new address type is unique in several ways: first, it has a new dust limit of only 240 sats; second, it's less than half the size of a "regular" bitcoin address; third, there's only *one* address in the entire P2A category, so every transaction that uses it "reuses" the same address; fourth, it's an anyone-can-spend address, meaning it has no private key and you can spend money from it without signing anything. It's not required to use P2A addresses in zero-fee transactions but this address type was created for use in these types of transactions, so consider using it just for fun.</p>
+            <div class="checkbox_container"><div class="use_p2a_div"><input type="checkbox" id="use_p2a" class="use_p2a"></div><div class="p2a_label_div"><label for="use_p2a">Use a P2A address in this transaction</label></div></div>
+        </div>
+        <div class="step step_4">
+            <p class="header">Step 4</p>
+            <p>Hit submit. A pair of two transactions will be generated; the first pays no fees and will send your money to a "waiting room" address. The second pays "double" fees and moves your money out of the waiting room and into the address you chose as a destination. A box called "step 5" will appear containing the two transactions in "raw" format (aka hex format) and it will also explain what to do next.</p>
             <p><button class="prepare_tx">Submit</button></p>
         </div>
-        <div class="step step_4 hidden">
-            <p class="header">Step 4</p>
+        <div class="step step_5 hidden">
+            <p class="header">Step 5</p>
             <p>Here are your two transactions in raw (hex) format:</p>
             <p>Tx1: <span class="tx1"></p>
             <p>Tx2: <span class="tx2"></p>
@@ -289,6 +310,8 @@
             <p>Note that the above links won't work til AFTER you've broadcasted your package.</p>
         </div>
         <script>
+            var using_p2a = false;
+            $( '.use_p2a' ).checked = false;
             $( '.destination' ).value = "";
             $( '.explainer_label' ).onclick = () => {
                 if ( $( '.explainer' ).classList.contains( "hidden" ) ) $( '.explainer' ).classList.remove( "hidden" );
@@ -296,6 +319,10 @@
             }
             $( '.prepare_tx' ).onclick = () => {
                 things_awaited[ "keep_going" ] = true;
+            }
+            $( '.use_p2a' ).onchange = e => {
+                if ( e.target.checked ) using_p2a = true;
+                else using_p2a = false;
             }
             (async()=>{
                 var privkey_1 = bytesToHex( nobleSecp256k1.utils.randomPrivateKey() );
@@ -347,6 +374,13 @@
                         scriptPubKey: tapscript.Address.toScriptPubKey( address_2 ),
                     }],
                 });
+                if ( using_p2a ) {
+                    tx_a.vout.unshift({
+                        value: 240,
+                        scriptPubKey: "51024e73",
+                    });
+                    tx_a.vout[ 1 ].value = amnt - 240;
+                }
                 var sig_a = tapscript.Signer.taproot.sign( privkey_1, tx_a, 0 ).hex;
                 tx_a.vin[ 0 ].witness = [ sig_a ];
                 //create tx_b, which pays double fees to send from address_2 to anywhere
@@ -367,9 +401,23 @@
                         scriptPubKey: tapscript.Address.toScriptPubKey( destino ),
                     }],
                 });
+                if ( using_p2a ) {
+                    tx_b.vin.unshift({
+                        txid: txid_a,
+                        vout: 0,
+                        prevout: {
+                            value: 240,
+                            scriptPubKey: "51024e73",
+                        }
+                    });
+                    tx_b.vin[ 1 ].vout = 1;
+                    tx_b.vin[ 1 ].prevout.value = amnt - 240;
+                }
                 var txid_b = tapscript.Tx.util.getTxid( tx_b );
-                var sig_b = tapscript.Signer.taproot.sign( privkey_2, tx_b, 0 ).hex;
-                tx_b.vin[ 0 ].witness = [ sig_b ];
+                var input_to_sign = 0;
+                if ( using_p2a ) input_to_sign = 1;
+                var sig_b = tapscript.Signer.taproot.sign( privkey_2, tx_b, input_to_sign ).hex;
+                tx_b.vin[ input_to_sign ].witness = [ sig_b ];
                 var txs = [ tapscript.Tx.encode( tx_a ).hex, tapscript.Tx.encode( tx_b ).hex ];
                 //broadcast tx_a and tx_b as a package
                 // console.log( "broadcast these transactions:" );
@@ -387,7 +435,8 @@
                 $( '.step_1' ).classList.add( "hidden" );
                 $( '.step_2' ).classList.add( "hidden" );
                 $( '.step_3' ).classList.add( "hidden" );
-                $( '.step_4' ).classList.remove( "hidden" );
+                $( '.step_4' ).classList.add( "hidden" );
+                $( '.step_5' ).classList.remove( "hidden" );
             })();
         </script>
         <div class="black-bg hidden"></div>
