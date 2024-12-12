@@ -5,136 +5,6 @@
         <meta name="viewport" content="width=device-width, user-scalable=no">
         <script src="https://unpkg.com/@cmdcode/tapscript@1.4.0"></script>
         <script src="https://bundle.run/noble-secp256k1@1.2.14"></script>
-        <script>
-            var things_awaited = {
-                keep_going: false,
-            }
-            var hexToBytes = hex => Uint8Array.from( hex.match( /.{1,2}/g ).map( byte => parseInt( byte, 16 ) ) );
-            var bytesToHex = bytes => bytes.reduce( ( str, byte ) => str + byte.toString( 16 ).padStart( 2, "0" ), "" );
-            var isValidAddress = address => {
-                try {
-                    return !!tapscript.Address.decode( address ).script;
-                } catch( e ) {return;}
-                return;
-            }
-            var waitSomeSeconds = num => {
-                var num = num.toString() + "000";
-                num = Number( num );
-                return new Promise( resolve => setTimeout( resolve, num ) );
-            }
-            var getData = url => {
-                return new Promise( async function( resolve, reject ) {
-                    function inner_get( url ) {
-                        var xhttp = new XMLHttpRequest();
-                        xhttp.open( "GET", url, true );
-                        xhttp.send();
-                        return xhttp;
-                    }
-                    var data = inner_get( url );
-                    data.onerror = function( e ) {
-                        resolve( "error" );
-                    }
-                    async function isResponseReady() {
-                        return new Promise( function( resolve2, reject ) {
-                            if ( !data.responseText || data.readyState != 4 ) {
-                                setTimeout( async function() {
-                                    var msg = await isResponseReady();
-                                    resolve2( msg );
-                                }, 1 );
-                            } else {
-                                resolve2( data.responseText );
-                            }
-                        });
-                    }
-                    var returnable = await isResponseReady();
-                    resolve( returnable );
-                });
-            }
-            async function getNote( item ) {
-                async function isNoteSetYet( note_i_seek ) {
-                    return new Promise( function( resolve, reject ) {
-                        if ( !note_i_seek ) {
-                            setTimeout( async function() {
-                                var msg = await isNoteSetYet( things_awaited[ item ] );
-                                resolve( msg );
-                            }, 100 );
-                        } else {
-                            resolve( note_i_seek );
-                        }
-                    });
-                }
-                async function getTimeoutData() {
-                    var note_i_seek = await isNoteSetYet( things_awaited[ item ] );
-                    return note_i_seek;
-                }
-                var returnable = await getTimeoutData();
-                return returnable;
-            }
-            var addressOnceHadMoney = async ( address, network ) => {
-                var url_half = `https://mempool.space/${network}`;
-                if ( network === "mutinynet/" ) url_half = `https://mutinynet.com/`;
-                var nonjson = await getData( url_half + "api/address/" + address );
-                var json = JSON.parse( nonjson );
-                if ( json[ "chain_stats" ][ "tx_count" ] > 0 || json[ "mempool_stats" ][ "tx_count" ] > 0 ) return true;
-                return false;
-            }
-            var loopTilAddressReceivesMoney = async ( address, network ) => {
-                var itReceivedMoney = false;
-                async function isDataSetYet( data_i_seek ) {
-                    return new Promise( ( resolve, reject ) => {
-                        if (!data_i_seek) {
-                            setTimeout( async () => {
-                                console.log( "waiting for address to receive money..." );
-                                try {
-                                    itReceivedMoney = await addressOnceHadMoney( address, network );
-                                }catch(e){}
-                                var msg = await isDataSetYet( itReceivedMoney );
-                                resolve( msg);
-                            }, 2000);
-                        } else {
-                            resolve( data_i_seek );
-                        }
-                    });
-                }
-
-                async function getTimeoutData() {
-                    var data_i_seek = await isDataSetYet( itReceivedMoney );
-                    return data_i_seek;
-                }
-
-                var returnable = await getTimeoutData();
-                return returnable;
-            }
-
-            async function addressReceivedMoneyInThisTx( address, network ) {
-                var url_half = `https://mempool.space/${network}`;
-                if ( network === "mutinynet/" ) url_half = `https://mutinynet.com/`;
-                var txid;
-                var vout;
-                var amt;
-                var nonjson = await getData( url_half + "api/address/" + address + "/txs" );
-                var json = JSON.parse( nonjson);
-                json.forEach( tx => {
-                    tx["vout"].forEach( ( output, index ) => {
-                        if ( output[ "scriptpubkey_address" ] == address ) {
-                            txid = tx[ "txid" ];
-                            vout = index;
-                            amt = output[ "value" ];
-                        }
-                    });
-                });
-                return [txid, vout, amt];
-            }
-            var modalVanish = () => {
-                $( ".black-bg" ).classList.add( "hidden" );
-                $( ".modal" ).classList.add( "hidden" );
-            }
-            var showModal = content => {
-                $( ".modal" ).innerHTML = `<div style="overflow-y: auto; max-height: 80vh; margin-top: 1.5rem;">${content}</div>`;
-                $( ".black-bg" ).classList.remove( "hidden" );
-                $( ".modal" ).classList.remove( "hidden" );
-            }
-        </script>
         <style>
             * {
                 box-sizing: border-box;
@@ -147,9 +17,15 @@
                 margin: auto;
                 line-height: 1.25;
                 padding: 0;
+                height: 100%;
             }
             body {
                 margin: 3rem 1rem;
+                height: calc( 100% - 6rem );
+            }
+            body * {
+                width: 100%;
+                text-align: center;
                 word-wrap: break-word;
             }
             h1 {
@@ -168,59 +44,22 @@
             .hidden {
                 display: none !important;
             }
-            .explainer_label {
-                color: blue;
-                text-decoration: underline;
-                cursor: pointer;
+            .wallet {
+                display: flex;
+                height: calc( 100% - 2rem );
+                justify-content: center;
+                flex-direction: column;
+                align-items: center;
             }
-            .step {
-                padding: 1rem;
+            .label {
                 margin-top: 1rem;
-                border: 1px solid black;
-                border-radius: 1rem;
-            }
-            .header {
                 font-weight: bold;
-                text-decoration: underline;
             }
-            .greybox {
-                background-color: #cccccc;
-                padding: 0.5rem;
+            .send {
+                margin-top: 1rem;
+                width: auto;
             }
             @media screen and (max-width: 600px) {
-            }
-        </style>
-        <style>
-            .black-bg {
-                width: 100%;
-                position: fixed;
-                top: 0;
-                left: 0;
-                background-color: black;
-                opacity: .5;
-                width: 100vw;
-                height: 100vh;
-            }
-            .modal {
-                position: fixed;
-                box-sizing: border-box;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%,-50%);
-                width: 90%;
-                max-width: 560px;
-                background-color: white;
-                border-radius: 1rem;
-                padding: 20px;
-                color: black;
-                text-align: center;
-                word-wrap: break-word;
-            }
-            .modal * {
-                color: black;
-            }
-            .modal input, .modal textarea {
-                max-width: 90%;
             }
         </style>
         <script>
@@ -230,166 +69,143 @@
             var url_keys = url_params.keys();
             var $_GET = {}
             for ( var key of url_keys ) $_GET[ key ] = url_params.get( key );
+            var hash_arr = window.location.href.substring( window.location.href.indexOf( "#" ) ).split( "#" );
+            hash_arr.splice( 0, 1 );
+            var params = {}
+            hash_arr.forEach( item => {
+                var vals = item.split( "=" );
+                params[ vals[ 0 ] ] = vals[ 1 ];
+            });
         </script>
     </head>
     <body>
-        <h1>Zero Fee Playground</h1>
-        <p>Welcome to the zero fee playground. <span class="explainer_label">Click to read an explainer.</span></p>
-        <div class="explainer hidden">
-            <p>
-                This page showcases a recent upgrade to bitcoin in version 28. Before v28, all nodes refused, by default, to relay transactions that paid zero fees, and miners refused to mine them. Also, nodes and miners rejected transactions that *did* pay a fee if it was below a "minimum fee" threshold. The "minimum fee" threshold varied on a node-by-node basis, but it was related to the average fee paid by the transactions in each node's copy of the mempool.
-            </p>
-            <p>
-                V28 changed the rules. A transaction can now pay zero fees (or a fee below the "minimum fee" threshold) if it is paired with a second transaction that pays *extra* fees. To follow the new rule, the second transaction has to pay enough fees that, when the two transactions are considered together, their "combined feerate" is above the old "minimum fee" threshold. There are also several other conditions they have to follow; for example, the two transactions have to have version number 3, and the "first" one can't spend an unconfirmed utxo. The full rules are outlined in <a href="https://bips.xyz/431" target="_blank">Bip 431</a> and <a href="https://bips.xyz/331" target="_blank">Bip 331</a>.
-            </p>
-            <p>
-                If you follow the steps below, you will *create* a pair of transactions that follows the new rules. The first of your two transactions will pay zero fees, but nodes will still relay it (and miners will still mine it) as long as it is paired with the second transaction.
-            </p>
-        </div>
-        <div class="step step_1">
-            <p class="header">Step 1</p>
-            <p>Send funds to the following address on testnet4 -- this will constitute your "funding transaction."</p>
-            <p class="entrypoint"></p>
-            <p>You can use this faucet if you don't have any testnet4 funds:</p>
-            <p><a href="https://mempool.space/testnet4/faucet" target="_blank">Testnet4 Faucet</a></p>
-        </div>
-        <div class="step step_2">
-            <p class="header">Step 2</p>
-            <p>Enter an address where you want your funds to end up</p>
-            <p><input class="destination"></p>
-            <p>If you don't know where to send them, you can send them to my testnet4 address:</p>
-            <p>tb1pj0rkn0qvvc5yg876qzh5ee56dutprku826ps3uantpx4vx3mujnq3u6uhm</p>
-        </div>
-        <div class="step step_3">
-            <p class="header">Step 3</p>
-            <p>Hit submit. A pair of two transactions will be generated; the first pays no fees and will send your money to a "waiting room" address. The second pays "double" fees and moves your money out of the waiting room and into the address you chose as a destination. A box called "step 4" will appear containing the two transactions in "raw" format (aka hex format) and it will also explain what to do next.</p>
-            <p><button class="prepare_tx">Submit</button></p>
-        </div>
-        <div class="step step_4 hidden">
-            <p class="header">Step 4</p>
-            <p>Here are your two transactions in raw (hex) format:</p>
-            <p>Tx1: <span class="tx1"></p>
-            <p>Tx2: <span class="tx2"></p>
-            <p>Now you have a choice about what to do with them. In my opinion, it is fun to compare "errors" with "successes." So I recommend causing a few errors first, and then do things the "right" way to see how that looks.</p>
-            <p>There are two errors you can cause:</p>
-            <ol>
-                <li>Try to broadcast either transaction (or both) before <a class="funding_tx_0" href="" target="_blank">your funding transaction</a> confirms. Do this by <a href="https://mempool.space/testnet4/tx/push" target="_blank">clicking this link</a> and pasting tx1 or tx2 into the field that says "Broadcast Transaction," and then hitting the Broadcast Transaction button. This should fail; by default, nodes won't relay tx1 (and miners won't mine it) if it tries to spend an unconfirmed utxo (meaning, <a class="funding_tx_1" href="" target="_blank">your funding transaction</a> has to confirm *first*), and similarly, nodes won't relay tx2 (and miners won't mine it) unless it's paired with tx1 (they'll also do it if tx1 confirms somehow, e.g. if you bribe a miner to mine it anyway).</li>
-                <li>Wait til <a class="funding_tx_2" href="" target="_blank">your funding transaction</a> confirms and then try to <a href="https://mempool.space/testnet4/tx/push" target="_blank">broadcast</a> either tx1 or tx2 by itself. This should fail; tx1 pays zero fees, and by default, nodes will only relay a zero fee transaction (and miners will only mine it) if it is paired with a transaction that pays *double* fees -- which means broadcasting tx1 and tx2 together as a "package." And if you try to broadcast tx2 by itself, that shouldn't work because it has tx1 as a "dependency" -- meaning it tries to spend a utxo created by tx1, so if tx1 doesn't come first, tx2 is invalid.</li>
-            </ol>
-            <p>Once you've had fun causing errors, you can do things the *right* way, which means (1) waiting til <a class="funding_tx_3" href="" target="_blank">your funding transaction</a> confirms and (2) then broadcasting tx1 and tx2 together as a package. Ready? First wait until the following transaction confirms:</p>
-            <p class="funding_tx_4"></p>
-            <p>Next, turn tx1 and tx2 into a package. This is very easy, it just means you put them next to one another with a comma between them, and it's so easy I've already done it for you. Here they are:</p>
-            <p class="header">Your two transactions formatted as a package</p>
-            <p class="greybox package"></p>
-            <p>Copy the transaction package and then visit this page:</p>
-            <p><a href="https://mempool.space/testnet4/tx/push" target="_blank">Transaction Broadcaster</a></p>
-            <p>Then paste your packaged transactions into the field that says "Submit Package." You can leave the other two fields blank (Maximum Fee Rate and Maximum Burn Amount). Then just hit the Submit Package button. As long as your funding transaction confirmed, you should see a success message indicating that you successfully broadcasted tx1 and tx2 -- even though tx1 paid zero fees. After you've broadcasted them, you can click here to view them:</p>
-            <p>Tx1: <span class="txid1"></span></p>
-            <p>Tx2: <span class="txid2"></span></p>
-            <p>Note that the above links won't work til AFTER you've broadcasted your package.</p>
+        <h1>Testnet faucet</h1>
+        <div class="wallet">
+            <div class="label">Address</div>
+            <div class="address"></div>
+            <div class="label">Balance</div>
+            <div><span class="balance">0</span> sats</div>
+            <div><button class="send">Send</button></div>
         </div>
         <script>
-            $( '.destination' ).value = "";
-            $( '.explainer_label' ).onclick = () => {
-                if ( $( '.explainer' ).classList.contains( "hidden" ) ) $( '.explainer' ).classList.remove( "hidden" );
-                else $( '.explainer' ).classList.add( "hidden" );
-            }
-            $( '.prepare_tx' ).onclick = () => {
-                things_awaited[ "keep_going" ] = true;
-            }
-            (async()=>{
-                var privkey_1 = bytesToHex( nobleSecp256k1.utils.randomPrivateKey() );
-                var pubkey_1 = nobleSecp256k1.getPublicKey( privkey_1, true ).substring( 2 );
-                var address_1 = tapscript.Address.fromScriptPubKey( [ 1, pubkey_1 ], "testnet" );
-                $( '.entrypoint' ).innerText = address_1;
-                await getNote( "keep_going" );
-                //send money to address_1 and wait for that to confirm
-                var destino = $( '.destination' ).value;
-                things_awaited[ "keep_going" ] = false;
-                if ( !isValidAddress( destino ) ) {
-                    alert( `you forgot to enter a destination address, try again` );
-                    await getNote( "keep_going" );
-                    destino = $( '.destination' ).value;
+            // testnet4
+            // file:///home/supertestnet/bitcoin_projects/testnet_faucet/index.html#network=testnet4#privkey=f7888b2a83ca7075bfd3cdf37b2bfdf856b1ceb71edf090f8a81ead7647a270f
+
+            // signet
+            // file:///home/supertestnet/bitcoin_projects/testnet_faucet/index.html#network=signet#privkey=f7888b2a83ca7075bfd3cdf37b2bfdf856b1ceb71edf090f8a81ead7647a270f
+
+            // mutinynet
+            // file:///home/supertestnet/bitcoin_projects/testnet_faucet/index.html#network=mutinynet#privkey=4bece2b1c5d73ddf1bd6a2c56321fef71d4fe094be481e8597995e6513ff217c
+            if ( Object.keys( params ).length ) {
+                var utxos = [];
+                var pubkey = nobleSecp256k1.getPublicKey( params[ "privkey" ], true ).substring( 2 );
+                var address = tapscript.Address.fromScriptPubKey( [ 1, pubkey ], "testnet" );
+                $( '.address' ).innerText = address;
+                var isValidAddress = address => {
+                    try {
+                        return !!tapscript.Address.decode( address ).script;
+                    } catch( e ) {return;}
+                    return;
                 }
-                // var txid = prompt( `send money to the address in your console and enter the txid` );
-                // var vout = Number( prompt( `and the vout` ) );
-                // var amnt = Number( prompt( `and the amount` ) );
-                var had_money = await addressOnceHadMoney( address_1, "testnet4/" );
-                if ( !had_money ) {
-                    var content = `<p>Please send money to this address on testnet4:</p><p>${address_1}</p><p>You can use this faucet if you don't have any testnet4 funds:</p><p><a href="https://mempool.space/testnet4/faucet" target="_blank">Testnet4 Faucet</a></p>`;
-                    showModal( content );
+                var getData = url => {
+                    return new Promise( async function( resolve, reject ) {
+                        function inner_get( url ) {
+                            var xhttp = new XMLHttpRequest();
+                            xhttp.open( "GET", url, true );
+                            xhttp.send();
+                            return xhttp;
+                        }
+                        var data = inner_get( url );
+                        data.onerror = function( e ) {
+                            resolve( "error" );
+                        }
+                        async function isResponseReady() {
+                            return new Promise( function( resolve2, reject ) {
+                                if ( !data.responseText || data.readyState != 4 ) {
+                                    setTimeout( async function() {
+                                        var msg = await isResponseReady();
+                                        resolve2( msg );
+                                    }, 1 );
+                                } else {
+                                    resolve2( data.responseText );
+                                }
+                            });
+                        }
+                        var returnable = await isResponseReady();
+                        resolve( returnable );
+                    });
                 }
-                await loopTilAddressReceivesMoney( address_1, "testnet4/" );
-                await waitSomeSeconds( 2 );
-                modalVanish();
-                var txinfo = await addressReceivedMoneyInThisTx( address_1, "testnet4/" );
-                var txid = txinfo[ 0 ];
-                var vout = txinfo[ 1 ];
-                var amnt = txinfo[ 2 ];
-                var privkey_2 = bytesToHex( nobleSecp256k1.utils.randomPrivateKey() );
-                var pubkey_2 = nobleSecp256k1.getPublicKey( privkey_2, true ).substring( 2 );
-                var address_2 = tapscript.Address.fromScriptPubKey( [ 1, pubkey_2 ] );
-                //create tx_a, which pays zero fees to send from address_1 to address_2
-                //ensure tx_a is a v3 transaction
-                var tx_a = tapscript.Tx.create({
-                    version: 3,
-                    vin: [{
-                        txid,
-                        vout,
-                        prevout: {
+                async function getUTXOs( privkey, network ) {
+                    var url_half = `https://mempool.space/${network}`;
+                    if ( network === "mutinynet/" ) url_half = `https://mutinynet.com/`;
+                    var pubkey = nobleSecp256k1.getPublicKey( params[ "privkey" ], true ).substring( 2 );
+                    var address = tapscript.Address.fromScriptPubKey( [ 1, pubkey ], "testnet" );
+                    var esplorautxos = await getData( url_half + "api/address/" + address + "/utxo" );
+                    esplorautxos = JSON.parse( esplorautxos );
+                    var obj = [];
+                    esplorautxos.forEach( function( item, index ) {
+                        var utxo = {}
+                        utxo[ "tx_id" ] = item[ "txid" ];
+                        utxo[ "output_number" ] = item[ "vout" ];
+                        utxo[ "amount" ] = item[ "value" ];
+                        utxo[ "privkey" ] = privkey;
+                        utxo[ "pubkey" ] = pubkey;
+                        obj.push( utxo );
+                    });
+                    return( obj );
+                }
+                $( '.send' ).onclick = async () => {
+                    var destino = prompt( `enter the address you want to send money to` );
+                    if ( !isValidAddress( destino ) ) return;
+                    var amnt = Number( prompt( `enter how many sats you want to send there` ) );
+                    if ( !amnt || isNaN( amnt ) ) return;
+                    var vin = [];
+                    var utxos_i_will_use = [];
+                    utxos.forEach( utxo => {
+                        if ( utxo[ "amount" ] > 1000000000 ) utxos_i_will_use.push( utxo );
+                    });
+                    var sum = 0;
+                    utxos_i_will_use.forEach( utxo => sum = sum + utxo[ "amount" ] );
+                    var change_amnt = sum - amnt - ( 500 + ( 200 * utxos_i_will_use.length ) );
+                    var change_addy = address;
+                    utxos_i_will_use.forEach( utxo => {
+                        vin.push({
+                            txid: utxo[ "tx_id" ],
+                            vout: utxo[ "output_number" ],
+                            prevout: {
+                                value: utxo[ "amount" ],
+                                scriptPubKey: [ 1, utxo[ "pubkey" ] ],
+                            }
+                        });
+                    })
+                    var tx = tapscript.Tx.create({
+                        vin,
+                        vout: [{
                             value: amnt,
-                            scriptPubKey: tapscript.Address.toScriptPubKey( address_1 ),
-                        }
-                    }],
-                    vout: [{
-                        value: amnt,
-                        scriptPubKey: tapscript.Address.toScriptPubKey( address_2 ),
-                    }],
-                });
-                var sig_a = tapscript.Signer.taproot.sign( privkey_1, tx_a, 0 ).hex;
-                tx_a.vin[ 0 ].witness = [ sig_a ];
-                //create tx_b, which pays double fees to send from address_2 to anywhere
-                //ensure tx_b is a v3 transaction
-                var txid_a = tapscript.Tx.util.getTxid( tx_a );
-                var tx_b = tapscript.Tx.create({
-                    version: 3,
-                    vin: [{
-                        txid: txid_a,
-                        vout: 0,
-                        prevout: {
-                            value: amnt,
-                            scriptPubKey: tapscript.Address.toScriptPubKey( address_2 ),
-                        }
-                    }],
-                    vout: [{
-                        value: amnt - 1000,
-                        scriptPubKey: tapscript.Address.toScriptPubKey( destino ),
-                    }],
-                });
-                var txid_b = tapscript.Tx.util.getTxid( tx_b );
-                var sig_b = tapscript.Signer.taproot.sign( privkey_2, tx_b, 0 ).hex;
-                tx_b.vin[ 0 ].witness = [ sig_b ];
-                var txs = [ tapscript.Tx.encode( tx_a ).hex, tapscript.Tx.encode( tx_b ).hex ];
-                //broadcast tx_a and tx_b as a package
-                // console.log( "broadcast these transactions:" );
-                // console.log( txs );
-                $( '.tx1' ).innerText = txs[ 0 ];
-                $( '.tx2' ).innerText = txs[ 1 ];
-                $( '.funding_tx_0' ).href = `https://mempool.space/testnet4/tx/${txid}`;
-                $( '.funding_tx_1' ).href = `https://mempool.space/testnet4/tx/${txid}`;
-                $( '.funding_tx_2' ).href = `https://mempool.space/testnet4/tx/${txid}`;
-                $( '.funding_tx_3' ).href = `https://mempool.space/testnet4/tx/${txid}`;
-                $( '.funding_tx_4' ).innerHTML = `<a href="https://mempool.space/testnet4/tx/${txid}" target="_blank">${txid}</a>`;
-                $( '.package' ).innerText = `${txs[ 0 ]},${txs[ 1 ]}`;
-                $( '.txid1' ).innerHTML = `<a href="https://mempool.space/testnet4/tx/${txid_a}" target="_blank">${txid_a}</a>`;
-                $( '.txid2' ).innerHTML = `<a href="https://mempool.space/testnet4/tx/${txid_b}" target="_blank">${txid_b}</a>`;
-                $( '.step_1' ).classList.add( "hidden" );
-                $( '.step_2' ).classList.add( "hidden" );
-                $( '.step_3' ).classList.add( "hidden" );
-                $( '.step_4' ).classList.remove( "hidden" );
-            })();
+                            scriptPubKey: tapscript.Address.toScriptPubKey( destino ),
+                        },{
+                            value: change_amnt,
+                            scriptPubKey: tapscript.Address.toScriptPubKey( change_addy ),
+                        }],
+                    });
+                    utxos_i_will_use.forEach( ( utxo, index ) => {
+                        var sig = tapscript.Signer.taproot.sign( utxo[ "privkey" ], tx, index );
+                        tx.vin[ index ].witness = [ sig ];
+                    });
+                    var txhex = tapscript.Tx.encode( tx ).hex;
+                    console.log( 'broadcast this:' );
+                    console.log( txhex );
+                    alert( `broadcast the tx in your browser console` );
+                }
+                (async()=>{
+                    var privkey = params[ "privkey" ];
+                    var network = params[ "network" ] + "/";
+                    utxos = await getUTXOs( privkey, network );
+                    var sum = 0;
+                    utxos.forEach( utxo => sum = sum + utxo[ "amount" ] );
+                    $( '.balance' ).innerText = sum.toLocaleString();
+                })();
+            }
         </script>
-        <div class="black-bg hidden"></div>
-        <div class="modal hidden"></div>
     </body>
 </html>
